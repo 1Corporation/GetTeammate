@@ -1,9 +1,12 @@
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
+
+from bot.db import Database
 from bot.repository import ProfilesRepository
 from bot.keyboards import moderation_kb
 from bot.config import settings
+from dp import bot
 
 def register_admin_handlers(dp: Dispatcher, bot: Bot):
     dp.message.register(cmd_pending, Command(commands=["pending"]))
@@ -34,13 +37,26 @@ async def moderation_callback(query: CallbackQuery):
     data = query.data.split(":")
     action = data[1]
     profile_id = int(data[2])
+    user_id = int(data[3])
     if not await _is_admin(query.message.chat.id):
         await query.answer("Нет прав", show_alert=True)
         return
     if action == "approve":
         await ProfilesRepository.set_status(profile_id, "approved")
         await query.message.edit_caption(caption=f"Анкета #{profile_id} — одобрено ✅", reply_markup=None)
+        await bot.send_message(user_id, "Анкета принята!")
     elif action == "reject":
         await ProfilesRepository.set_status(profile_id, "rejected")
         await query.message.edit_caption(f"Анкета #{profile_id} — отклонено ❌")
         await query.message.answer(f"Анкета #{profile_id} отклонена.")
+        await bot.send_message(user_id, "Анкета отклонена. По вопросам - @Justiks")
+    elif action == "blacklist":
+        await ProfilesRepository.set_status(profile_id, "rejected")
+        await query.message.edit_caption(f"Анкета #{profile_id} — отклонено ❌")
+        await query.message.answer(f"Пользователь {user_id} был отправлен в блеклист.")
+        await bot.send_message(user_id, "Ты отправлен в блеклист. По вопросам - @Justiks")
+
+        # Добавляем в базу данных
+        conn = await Database.get_conn()
+        await conn.execute("INSERT INTO blacklist (user_id) VALUES (?)", (user_id,))
+        await conn.commit()

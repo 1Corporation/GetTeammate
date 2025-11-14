@@ -15,8 +15,9 @@ async def notify_admins_about_new_profile(bot: Bot, profile: ProfileDB):
 
             reply_markup = InlineKeyboardBuilder()
             reply_markup.row(
-                InlineKeyboardButton(text="Одобрить ✅", callback_data=f"mod:approve:{profile.id}"),
-                InlineKeyboardButton(text="Отклонить ❌", callback_data=f"mod:reject:{profile.id}"))
+                InlineKeyboardButton(text="Одобрить ✅", callback_data=f"mod:approve:{profile.id}:{profile.user_id}"),
+                InlineKeyboardButton(text="Отклонить ❌", callback_data=f"mod:reject:{profile.id}:{profile.user_id}"),
+            InlineKeyboardButton(text="В блеклист ⚠️", callback_data=f"mod:blacklist:{profile.id}:{profile.user_id}"),)
             await bot.send_photo(chat_id=admin_id, photo=profile.photo_file_id, caption=text, reply_markup=reply_markup.as_markup())
 
         except Exception as e:

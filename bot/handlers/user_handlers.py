@@ -47,8 +47,15 @@ async def cmd_start(message: Message):
 
 
 async def cmd_create_profile(message: Message, state: FSMContext):
-    # Проверяем существуют ли другие анкеты от этого пользователя
     conn = await Database.get_conn()
+
+    # Проверка на блеклист
+    result = await conn.execute("SELECT COUNT(*) FROM blacklist WHERE user_id=?", (message.from_user.id,))
+    if (await result.fetchone())[0] > 0:
+        await message.reply("Ты находишься в блеклисте и не можешь создавать анкеты. По вопросам - @Justiks")
+        return
+
+    # Проверяем существуют ли другие анкеты от этого пользователя
     result = await conn.execute("SELECT COUNT(*) FROM profiles WHERE user_id=?", (message.from_user.id,))
     if (await result.fetchone())[0] > 0:
         await state.set_state(DeleteDublicateProfileSG.waiting_answer)
@@ -105,12 +112,13 @@ async def process_description(message: Message, state: FSMContext, bot: Bot):
     if not text:
         await message.reply("Описание пустое — попробуй ещё раз.")
         return
+    await state.clear()
     profile_create = ProfileCreate(
         user_id=message.from_user.id,
         username=message.from_user.username,
         full_name=f"{message.from_user.first_name or ''} {message.from_user.last_name or ''}".strip() or None,
         photo_file_id=photo_file_id,
-        description=text,
+        description=text[:1000],
     )
     profile_id = await ProfilesRepository.create(profile_create)
     profile_db = await ProfilesRepository.get_by_id(profile_id)
@@ -118,7 +126,6 @@ async def process_description(message: Message, state: FSMContext, bot: Bot):
     # notify admins
     if profile_db:
         await notify_admins_about_new_profile(bot, profile_db)
-    await state.clear()
 
 
 async def cmd_browse(message: Message):
@@ -173,7 +180,7 @@ async def browse_callback(query: CallbackQuery):
     # edit media
     try:
         await query.message.edit_media(
-            media=await query.bot.api.build_input_media_photo(p.photo_file_id, caption=caption), reply_markup=kb,
+            media=await query.bot.api.build_input_media_photo(p.photo_file_id), reply_markup=kb,
             parse_mode="HTML")
     except Exception:
         # fallback: send new message and delete old

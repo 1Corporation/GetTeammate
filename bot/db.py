@@ -29,6 +29,7 @@ class Database:
             created_at TEXT NOT NULL
         );
         """)
+        await cls._conn.execute("CREATE TABLE IF NOT EXISTS blacklist (user_id INTEGER PRIMARY KEY)")
         await cls._conn.commit()
 
     @classmethod

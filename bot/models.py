@@ -13,3 +13,4 @@ class ProfileDB(ProfileCreate):
     id: int
     status: str = Field(default="pending")
     created_at: datetime
+    user_id: int
