@@ -1,5 +1,5 @@
 from aiogram import Bot, Dispatcher
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from bot.repository import ProfilesRepository
 from bot.keyboards import moderation_kb
@@ -34,13 +34,12 @@ async def moderation_callback(query: CallbackQuery):
     data = query.data.split(":")
     action = data[1]
     profile_id = int(data[2])
-    if not await _is_admin(query.from_user.id):
+    if not await _is_admin(query.message.chat.id):
         await query.answer("Нет прав", show_alert=True)
         return
     if action == "approve":
         await ProfilesRepository.set_status(profile_id, "approved")
-        await query.message.edit_caption(f"Анкета #{profile_id} — одобрено ✅")
-        await query.message.answer(f"Анкета #{profile_id} одобрена.")
+        await query.message.edit_caption(caption=f"Анкета #{profile_id} — одобрено ✅", reply_markup=None)
     elif action == "reject":
         await ProfilesRepository.set_status(profile_id, "rejected")
         await query.message.edit_caption(f"Анкета #{profile_id} — отклонено ❌")
