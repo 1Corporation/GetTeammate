@@ -1,10 +1,12 @@
 from aiogram import Bot, Dispatcher
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, ReplyKeyboardRemove
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
+from aiogram.utils.keyboard import ReplyKeyboardBuilder, KeyboardButton
 from aiogram.fsm.state import StatesGroup, State
 from aiogram import F
 
+from bot.db import Database
 from bot.models import ProfileCreate, ProfileDB
 from bot.repository import ProfilesRepository
 from bot.keyboards import browse_kb, moderation_kb
@@ -16,6 +18,7 @@ class CreateProfileSG(StatesGroup):
     waiting_photo = State()
     waiting_description = State()
 
+
 class DeleteProfileSG(StatesGroup):
     waiting_answer = State()
 
@@ -23,6 +26,7 @@ class DeleteProfileSG(StatesGroup):
 def register_user_handlers(dp: Dispatcher, bot: Bot):
     dp.message.register(cmd_start, Command(commands=["start", "help"]))
     dp.message.register(cmd_create_profile, Command(commands=["create"]))
+    dp.message.register(confirm_profile_delete, DeleteProfileSG.waiting_answer)
     dp.message.register(process_photo, F.photo, CreateProfileSG.waiting_photo)
     dp.message.register(process_description, CreateProfileSG.waiting_description)
     dp.message.register(cmd_browse, Command(commands=["browse"]))
@@ -31,13 +35,53 @@ def register_user_handlers(dp: Dispatcher, bot: Bot):
 
 async def cmd_start(message: Message):
     print(message.chat.id)
-    await message.reply("👋 Привет! Я бот который поможет выбрать тебе сокомандника!\n/create — создать анкету\n/browse — посмотреть подборку")
+    await message.reply(
+        "👋 Привет! Я бот который поможет выбрать тебе сокомандника!\n/create — создать анкету\n/browse — посмотреть подборку")
 
 
 async def cmd_create_profile(message: Message, state: FSMContext):
-    await message.reply("Для того чтобы твоя анкета выглядела живой и яркой, отправь какую нибудь картинку которую будут видеть другие участники!")
+    # Проверяем существуют ли другие анкеты от этого пользователя
+    conn = await Database.get_conn()
+    result = await conn.execute("SELECT COUNT(*) FROM profiles WHERE user_id=?", (message.from_user.id,))
+    if (await result.fetchone())[0] > 0:
+        await state.set_state(DeleteProfileSG.waiting_answer)
+        reply_markup = ReplyKeyboardBuilder()
+        reply_markup.row(KeyboardButton(text="Да"), KeyboardButton(text="Нет"))
+        await message.reply("У тебя уже есть анкета. При создании новой удалится старая. Ты готов продолжить?",
+                            reply_markup=reply_markup.as_markup())
+        return
+
+    # Если все хорошо, начинаем создание анкеты
+    await message.reply(
+        "Для того чтобы твоя анкета выглядела живой и яркой, отправь какую нибудь картинку которую будут видеть другие участники!",
+        reply_markup=ReplyKeyboardRemove())
     await state.clear()
     await state.set_state(CreateProfileSG.waiting_photo)
+
+
+async def confirm_profile_delete(message: Message, state: FSMContext) -> None:
+    """
+    Подтверждение удаления старой анкеты, если пользователь хочет создать новую
+    :param message: aiogram.types.Message
+    :param state: FSMContext
+    :return: None
+    """
+
+    if message.text == "Да":
+        conn = await Database.get_conn()
+        await conn.execute("DELETE FROM profiles WHERE user_id=?", (message.from_user.id,))
+        await message.reply(
+            "Для того чтобы твоя анкета выглядела живой и яркой, отправь какую нибудь картинку которую будут видеть другие участники!",
+            reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+        await state.set_state(CreateProfileSG.waiting_photo)
+
+    elif message.text == "Нет":
+        await message.reply("Отменяю создание анкеты!", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+
+    else:
+        await message.reply("Ответь Да или Нет!")
 
 
 async def process_photo(message: Message, state: FSMContext):
