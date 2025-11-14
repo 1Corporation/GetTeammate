@@ -53,7 +53,7 @@ async def cmd_create_profile(message: Message, state: FSMContext):
 
     # Если все хорошо, начинаем создание анкеты
     await message.reply(
-        "Для того чтобы твоя анкета выглядела живой и яркой, отправь какую нибудь картинку которую будут видеть другие участники!",
+        "Начнем создавать анкету. Для того чтобы твоя анкета выглядела живой и яркой, отправь какую нибудь картинку которую будут видеть другие участники!\n\nОбращаем внимание, что наличие юзернейма в профиле телеграмм упрощает возможность связаться с вами другим участникам!",
         reply_markup=ReplyKeyboardRemove())
     await state.clear()
     await state.set_state(CreateProfileSG.waiting_photo)
@@ -127,8 +127,9 @@ async def cmd_browse(message: Message):
 
 
 def _format_profile_caption(p: ProfileDB) -> str:
-    name = p.full_name or f"@{p.username}" if p.username else "Аноним"
-    return f"<b>{name}</b>\n\n{p.description}"
+    name = p.full_name
+    username = f"@{p.username}" if p.username else "отсутствует"
+    return f"<b>{name}</b>\n<b>Юзернейм:</b> {username}\n\n{p.description}"
 
 
 async def browse_callback(query: CallbackQuery):
