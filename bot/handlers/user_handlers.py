@@ -19,17 +19,24 @@ class CreateProfileSG(StatesGroup):
     waiting_description = State()
 
 
+class DeleteDublicateProfileSG(StatesGroup):
+    waiting_answer = State()
+
+
 class DeleteProfileSG(StatesGroup):
     waiting_answer = State()
 
 
 def register_user_handlers(dp: Dispatcher, bot: Bot):
+    dp.message.register(cancel_command_process, Command(commands=["cancel"]))
     dp.message.register(cmd_start, Command(commands=["start", "help"]))
     dp.message.register(cmd_create_profile, Command(commands=["create"]))
-    dp.message.register(confirm_profile_delete, DeleteProfileSG.waiting_answer)
+    dp.message.register(confirm_duplicate_profile_delete, DeleteDublicateProfileSG.waiting_answer)
     dp.message.register(process_photo, F.photo, CreateProfileSG.waiting_photo)
     dp.message.register(process_description, CreateProfileSG.waiting_description)
     dp.message.register(cmd_browse, Command(commands=["browse"]))
+    dp.message.register(delete_my_profile, Command(commands=["delete"]))
+    dp.message.register(confirm_profile_delete, DeleteProfileSG.waiting_answer)
     dp.callback_query.register(browse_callback, lambda c: c.data and c.data.startswith("browse:"))
 
 
@@ -44,7 +51,7 @@ async def cmd_create_profile(message: Message, state: FSMContext):
     conn = await Database.get_conn()
     result = await conn.execute("SELECT COUNT(*) FROM profiles WHERE user_id=?", (message.from_user.id,))
     if (await result.fetchone())[0] > 0:
-        await state.set_state(DeleteProfileSG.waiting_answer)
+        await state.set_state(DeleteDublicateProfileSG.waiting_answer)
         reply_markup = ReplyKeyboardBuilder()
         reply_markup.row(KeyboardButton(text="Да"), KeyboardButton(text="Нет"))
         await message.reply("У тебя уже есть анкета. При создании новой удалится старая. Ты готов продолжить?",
@@ -59,7 +66,7 @@ async def cmd_create_profile(message: Message, state: FSMContext):
     await state.set_state(CreateProfileSG.waiting_photo)
 
 
-async def confirm_profile_delete(message: Message, state: FSMContext) -> None:
+async def confirm_duplicate_profile_delete(message: Message, state: FSMContext) -> None:
     """
     Подтверждение удаления старой анкеты, если пользователь хочет создать новую
     :param message: aiogram.types.Message
@@ -174,7 +181,7 @@ async def browse_callback(query: CallbackQuery):
         await query.message.answer_photo(photo=p.photo_file_id, caption=caption, reply_markup=kb)
 
 
-async def cancel_command_process(message: Message, context: FSMContext) -> None:
+async def cancel_command_process(message: Message, state: FSMContext) -> None:
     """
     Обработка команды /cancel
 
@@ -183,5 +190,53 @@ async def cancel_command_process(message: Message, context: FSMContext) -> None:
     :return: None
     """
 
-    await context.clear()
+    await state.clear()
     await message.reply("Все стейты очищены!", reply_markup=ReplyKeyboardRemove())
+
+
+async def delete_my_profile(message: Message, state: FSMContext) -> None:
+    """
+    Обработка команды /delete
+
+    :param message: aiogram.types.Message
+    :return: None
+    """
+
+    # Проверяем существуют ли другие анкеты от этого пользователя
+    conn = await Database.get_conn()
+    result = await conn.execute("SELECT COUNT(*) FROM profiles WHERE user_id=?", (message.from_user.id,))
+    if (await result.fetchone())[0] > 0:
+        await state.set_state(DeleteProfileSG.waiting_answer)
+        reply_markup = ReplyKeyboardBuilder()
+        reply_markup.row(KeyboardButton(text="Да"), KeyboardButton(text="Нет"))
+        await message.reply("Эта команда удаляет твою анкету. Ты готов продолжить?",
+                            reply_markup=reply_markup.as_markup())
+        return
+
+    await message.reply("У тебя нет активной анкеты!")
+
+
+
+async def confirm_profile_delete(message: Message, state: FSMContext) -> None:
+    """
+    Подтверждение удаления старой анкеты, если пользователь хочет удалить старую
+
+    :param message: aiogram.types.Message
+    :param state: FSMContext
+    :return: None
+    """
+
+    if message.text == "Да":
+        conn = await Database.get_conn()
+        await conn.execute("DELETE FROM profiles WHERE user_id=?", (message.from_user.id,))
+        await message.reply(
+            "Анкета удалена!",
+            reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+
+    elif message.text == "Нет":
+        await message.reply("Оставил твою анкету в покое...", reply_markup=ReplyKeyboardRemove())
+        await state.clear()
+
+    else:
+        await message.reply("Ответь Да или Нет!")
