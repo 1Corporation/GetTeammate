@@ -172,3 +172,16 @@ async def browse_callback(query: CallbackQuery):
         # fallback: send new message and delete old
         await query.message.delete()
         await query.message.answer_photo(photo=p.photo_file_id, caption=caption, reply_markup=kb)
+
+
+async def cancel_command_process(message: Message, context: FSMContext) -> None:
+    """
+    Обработка команды /cancel
+
+    :param message: aiogram.types.Message
+    :param context: FSMContext
+    :return: None
+    """
+
+    await context.clear()
+    await message.reply("Все стейты очищены!", reply_markup=ReplyKeyboardRemove())
