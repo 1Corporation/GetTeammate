@@ -101,7 +101,7 @@ async def confirm_duplicate_profile_delete(message: Message, state: FSMContext) 
 async def process_photo(message: Message, state: FSMContext):
     photo = message.photo[-1]  # best quality
     await state.update_data(photo_file_id=photo.file_id)
-    await message.reply("Отлично. Теперь расскажи о себе. Это отобразится в твоей анкете")
+    await message.reply("Отлично. Теперь расскажи о себе. Это отобразится в твоей анкете. Обязательно укажи трек (8-9 класс, 10-11 класс), расскажи о своем опыте и конечно же не много о себе")
     await state.set_state(CreateProfileSG.waiting_description)
 
 
